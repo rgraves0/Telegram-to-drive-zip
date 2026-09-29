@@ -17,10 +17,17 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds)
 
 def extract_id_from_url(url_or_id: str) -> str:
-    match = re.search(r'[-\w]{25,}', url_or_id)
-    return match.group(0) if match else url_or_id
+    """
+    Google Drive file/folder URL သို့မဟုတ် raw ID ထဲမှ သန့်စင်သော ID ကို သီးသန့် ဖြတ်ထုတ်ပေးခြင်း
+    """
+    clean_str = url_or_id.split('?')[0].split('&')[0]
+    match = re.search(r'[-\w]{25,}', clean_str)
+    if match:
+        return match.group(0)
+    return clean_str.rstrip('/').split('/')[-1]
 
 def download_file(service, file_id: str, dest_path: str):
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
     with open(dest_path, 'wb') as fh:
         downloader = MediaIoBaseDownload(fh, request, chunksize=10*1024*1024)
