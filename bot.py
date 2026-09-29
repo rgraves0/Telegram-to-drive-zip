@@ -89,24 +89,25 @@ async def zip_handler(client: Client, message: Message):
                 "date": now.strftime("%Y-%m-%d"),
                 "time": now.strftime("%H:%M:%S"),
                 "archive_name": archive_name,
-                "category": "Terabox_Backup",
+                "category": f"Drive_{fmt.upper()}", 
                 "counter": "-",
                 "original_name": meta['name']
             }
             # Apps Script Webhook ဆီသို့ Data ပို့ခြင်း
-            requests.post(WEBHOOK_URL, json=payload, timeout=10)
+            headers = {'Content-Type': 'application/json'}
+            requests.post(WEBHOOK_URL, json=payload, headers=headers, timeout=10)
         except Exception as sheet_err:
             print(f"Sheet Logging Error: {sheet_err}", flush=True)
 
         # Archive တင်ပြီးစီးပါက မူရင်း folder/file ကို Trash ထဲ ရွှေ့ခြင်း
-        await safe_edit(status_msg, "🗑️ မူရင်း Folder အား Drive ထဲမှ ရှင်းလင်းနေပါသည်...")
+        await safe_edit(status_msg, "🗑️️ မူရင်း Folder အား Drive ထဲမှ ရှင်းလင်းနေပါသည်...")
         try:
             gdrive.trash_item(service, target_id)
             trash_status = "(မူရင်း Folder ကို Trash သို့ ရွှေ့ပြီးပါပြီ)"
         except Exception as e:
             trash_status = f"(မူရင်းဖျက်ရာတွင် အမှားရှိ: {e})"
 
-        await safe_edit(status_msg, f"✅ **ပြီးစီးပါပြီ!**\nဖိုင်နာမည်: `{archive_name}`\n{trash_status}\n📊 Google Sheet စာရင်းသွင်းပြီးပါပြီ။")
+        await safe_edit(status_msg, f"✅ **ပြီးစီးပါပြီ!**\nဖိုင်နာမည်: `{archive_name}`\n{trash_status}\n📊 Google Sheet သို့ စာရင်းသွင်းပြီးပါပြီ။")
 
     except Exception as e:
         await safe_edit(status_msg, f"❌ **Error:** `{str(e)}`")
