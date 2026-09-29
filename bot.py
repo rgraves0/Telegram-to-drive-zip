@@ -1,6 +1,8 @@
 import os
 import shutil
 import tempfile
+import datetime
+import requests
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import MessageNotModified
@@ -10,6 +12,9 @@ import archiver
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
+
+# Google Apps Script Web App URL
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzoIM0VHtpjt-4SiYSPZhFHuG7iCWSS2W7xc-Ju-nxajo7LDodmX7bzhpwKOkIHVM8/exec"
 
 app = Client("gdrive_archiver_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
@@ -76,6 +81,23 @@ async def zip_handler(client: Client, message: Message):
         parent_id = meta.get('parents', ['root'])[0]
         gdrive.upload_file(service, output_archive, parent_id)
 
+        # Google Sheet ထဲသို့ Original Name နှင့် Archive Name အား အလိုအလျောက် ပို့ပေးခြင်း
+        await safe_edit(status_msg, "📝 Google Sheet ထဲသို့ စာရင်းသွင်းနေပါသည်...")
+        try:
+            now = datetime.datetime.now()
+            payload = {
+                "date": now.strftime("%Y-%m-%d"),
+                "time": now.strftime("%H:%M:%S"),
+                "archive_name": archive_name,
+                "category": "Terabox_Backup",
+                "counter": "-",
+                "original_name": meta['name']
+            }
+            # Apps Script Webhook ဆီသို့ Data ပို့ခြင်း
+            requests.post(WEBHOOK_URL, json=payload, timeout=10)
+        except Exception as sheet_err:
+            print(f"Sheet Logging Error: {sheet_err}", flush=True)
+
         # Archive တင်ပြီးစီးပါက မူရင်း folder/file ကို Trash ထဲ ရွှေ့ခြင်း
         await safe_edit(status_msg, "🗑️ မူရင်း Folder အား Drive ထဲမှ ရှင်းလင်းနေပါသည်...")
         try:
@@ -84,7 +106,7 @@ async def zip_handler(client: Client, message: Message):
         except Exception as e:
             trash_status = f"(မူရင်းဖျက်ရာတွင် အမှားရှိ: {e})"
 
-        await safe_edit(status_msg, f"✅ **ပြီးစီးပါပြီ!**\nဖိုင်နာမည်: `{archive_name}`\n{trash_status}")
+        await safe_edit(status_msg, f"✅ **ပြီးစီးပါပြီ!**\nဖိုင်နာမည်: `{archive_name}`\n{trash_status}\n📊 Google Sheet စာရင်းသွင်းပြီးပါပြီ။")
 
     except Exception as e:
         await safe_edit(status_msg, f"❌ **Error:** `{str(e)}`")
