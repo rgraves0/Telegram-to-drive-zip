@@ -13,8 +13,9 @@ API_HASH = os.getenv("API_HASH")
 
 app = Client("gdrive_archiver_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
+processing_users = set()
+
 async def safe_edit(msg: Message, text: str):
-    """Telegram Message Not Modified error မတက်စေရန် စစ်ဆေးပြီးမှ edit ပြုလုပ်ခြင်း"""
     try:
         if msg.text != text:
             await msg.edit_text(text)
@@ -29,55 +30,22 @@ async def start_handler(client: Client, message: Message):
         "👋 **Google Drive Archive Bot မှ ကြိုဆိုပါသည်!**\n\n"
         "**အသုံးပြုနည်း Commands:**\n"
         "1. `/unzip <Drive_File_Link>`\n"
-        "   👉 Zip, 7z, Rar, Tar စသည့် archive များကို ဖြည်ပြီး drive ထဲသို့ ပြန်တင်ပေးမည်။\n\n"
+        "   👉 Archive ကို ဖြည်ပြီး မူရင်း folder သို့ တင်ပေးမည်။\n\n"
         "2. `/zip <Drive_Link> [format]`\n"
-        "   👉 Format မထည့်ပါက **7z (Default)** ဖြင့် compress လုပ်ပါမည်။\n"
-        "   👉 Supported: `7z`, `zip`, `rar`, `tar`, `gz`"
+        "   👉 Folder ကို compress လုပ်ပြီး မူရင်း folder အား အလိုအလျောက် trash ထဲ ရွှေ့ပေးမည်။\n"
+        "   👉 Supported: `7z` (Default), `zip`, `rar`, `tar`, `gz`"
     )
-
-@app.on_message(filters.command("unzip"))
-async def unzip_handler(client: Client, message: Message):
-    if len(message.command) < 2:
-        return await message.reply_text("အသုံးပြုပုံ: `/unzip <Drive_File_Link>`")
-
-    status_msg = await message.reply_text("⏳ Drive API နှင့် ချိတ်ဆက်နေပါသည်...")
-    temp_dir = tempfile.mkdtemp()
-
-    try:
-        service = gdrive.get_drive_service()
-        file_id = gdrive.extract_id_from_url(message.command[1])
-        
-        await safe_edit(status_msg, "📥 ဖိုင်အချက်အလက် ရယူပြီး ဒေါင်းလုဒ်ဆွဲနေပါသည်...")
-        meta = gdrive.get_file_metadata(service, file_id)
-        local_archive = os.path.join(temp_dir, meta['name'])
-        
-        gdrive.download_file(service, file_id, local_archive)
-
-        await safe_edit(status_msg, "📦 Archive ကို ဖြည်ထုတ်နေပါသည်...")
-        extract_folder = os.path.join(temp_dir, "extracted")
-        os.makedirs(extract_folder, exist_ok=True)
-        
-        success, err_msg = archiver.extract_archive(local_archive, extract_folder)
-        if not success:
-            err_detail = err_msg[:500] if err_msg else "Password မှားယွင်းခြင်း သို့မဟုတ် archive ပျက်စီးနေခြင်း"
-            return await safe_edit(status_msg, f"❌ **Archive ဖြည်ရာတွင် အမှားဖြစ်သွားပါသည်:**\n```\n{err_detail}\n```")
-
-        await safe_edit(status_msg, "📤 Drive / Shared Drive သို့ ပြန်လည်တင်နေပါသည်...")
-        parent_id = meta.get('parents', ['root'])[0]
-        gdrive.upload_folder(service, extract_folder, parent_id)
-
-        await safe_edit(status_msg, f"✅ **အောင်မြင်ပါသည်!**\n`{meta['name']}` ကို အောင်မြင်စွာ ဖြည်ထုတ်ပြီးပါပြီ။")
-
-    except Exception as e:
-        await safe_edit(status_msg, f"❌ **Error:** `{str(e)}`")
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
 @app.on_message(filters.command("zip"))
 async def zip_handler(client: Client, message: Message):
-    if len(message.command) < 2:
-        return await message.reply_text("အသုံးပြုပုံ: `/zip <Drive_Link> [format]` (Default format: 7z)")
+    user_id = message.from_user.id
+    if user_id in processing_users:
+        return
 
+    if len(message.command) < 2:
+        return await message.reply_text("အသုံးပြုပုံ: `/zip <Drive_Link> [format]` (Default: 7z)")
+
+    processing_users.add(user_id)
     fmt = message.command[2].lower() if len(message.command) > 2 else "7z"
     status_msg = await message.reply_text("⏳ Processing စတင်နေပါသည်...")
     temp_dir = tempfile.mkdtemp()
@@ -108,12 +76,21 @@ async def zip_handler(client: Client, message: Message):
         parent_id = meta.get('parents', ['root'])[0]
         gdrive.upload_file(service, output_archive, parent_id)
 
-        await safe_edit(status_msg, f"✅ **ပြီးစီးပါပြီ!**\nဖိုင်နာမည်: `{archive_name}`")
+        # Archive တင်ပြီးစီးပါက မူရင်း folder/file ကို Trash ထဲ ရွှေ့ခြင်း
+        await safe_edit(status_msg, "🗑️ မူရင်း Folder အား Drive ထဲမှ ရှင်းလင်းနေပါသည်...")
+        try:
+            gdrive.trash_item(service, target_id)
+            trash_status = "(မူရင်း Folder ကို Trash သို့ ရွှေ့ပြီးပါပြီ)"
+        except Exception as e:
+            trash_status = f"(မူရင်းဖျက်ရာတွင် အမှားရှိ: {e})"
+
+        await safe_edit(status_msg, f"✅ **ပြီးစီးပါပြီ!**\nဖိုင်နာမည်: `{archive_name}`\n{trash_status}")
 
     except Exception as e:
         await safe_edit(status_msg, f"❌ **Error:** `{str(e)}`")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+        processing_users.discard(user_id)
 
 if __name__ == "__main__":
     print("Bot is starting...", flush=True)
