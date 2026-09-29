@@ -32,26 +32,28 @@ def compress_archive(source_path: str, output_path: str, fmt: str = "7z", passwo
 
     abs_output = os.path.abspath(output_path)
     
-    # Folder ထဲရှိ items များကို စစ်ဆေးခြင်း
     if os.path.isdir(source_path):
         items = os.listdir(source_path)
         if not items:
-            return False, "Google Drive မှ ဒေါင်းလုဒ်ဆွဲထားသော folder ထဲတွင် မည်သည့်ဖိုင်မှ မရှိပါ (Folder ဗလာဖြစ်နေသည်)။"
+            return False, "Google Drive မှ folder ထဲတွင် ဖိုင်မရှိပါ (Folder ဗလာဖြစ်နေသည်)။"
         cwd_dir = source_path
-        target_args = items  # list ထဲရှိ file အားလုံးကို pass လုပ်ခြင်း (* မသုံးပါ)
+        target_args = items
     else:
         cwd_dir = os.path.dirname(source_path)
         target_args = [os.path.basename(source_path)]
 
     if fmt == "rar":
-        cmd = ["rar", "a", "-r", "-y"]
+        # -m1 = Fastest compression (RAM အနည်းဆုံးသုံးရန်)
+        cmd = ["rar", "a", "-m1", "-r", "-y"]
         if pwd:
             cmd.append(f"-p{pwd}")
         cmd.append(abs_output)
         cmd.extend(target_args)
     else:
         cmd_fmt = "gzip" if fmt == "gz" else fmt
-        cmd = ["7z", "a", f"-t{cmd_fmt}", abs_output]
+        # -mx=1 : Fastest compression (RAM သုံးစွဲမှုကို 10MB - 30MB ဝန်းကျင်သာ ကန့်သတ်ရန်)
+        # -mmt=1 : CPU/Thread တစ်ခုတည်းသာ သုံးပြီး Memory spike မဖြစ်စေရန်
+        cmd = ["7z", "a", f"-t{cmd_fmt}", "-mx=1", "-mmt=1", abs_output]
         cmd.extend(target_args)
         cmd.extend(["-y", "-r"])
         
@@ -60,7 +62,6 @@ def compress_archive(source_path: str, output_path: str, fmt: str = "7z", passwo
             if fmt == "7z":
                 cmd.append("-mhe=on")
 
-    # Command run ခြင်း
     result = subprocess.run(cmd, cwd=cwd_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
     if result.returncode != 0:
