@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
-# p7zip နဲ့ unrar/rar tool များ ထည့်သွင်းခြင်း
-RUN apt-get update && apt-get install -y \
+# CLI Archiving Tools ထည့်သွင်းခြင်း
+RUN apt-get update && apt-get install -y --no-install-recommends \
     p7zip-full \
     p7zip-rar \
     rar \
