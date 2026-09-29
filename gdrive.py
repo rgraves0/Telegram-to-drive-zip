@@ -101,6 +101,7 @@ def upload_folder(service, local_dir: str, parent_id: str):
             upload_folder(service, entry.path, new_folder_id)
         elif entry.is_file():
             upload_file(service, entry.path, new_folder_id)
+
 def trash_item(service, item_id: str):
     """မူရင်း file သို့မဟုတ် folder ကို Google Drive Trash (အမှိုက်ပုံး) ထဲသို့ ရွှေ့ခြင်း"""
     service.files().update(
