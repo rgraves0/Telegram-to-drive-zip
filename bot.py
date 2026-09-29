@@ -14,14 +14,14 @@ API_HASH = os.getenv("API_HASH")
 app = Client("gdrive_archiver_bot", bot_token=BOT_TOKEN, api_id=API_ID, api_hash=API_HASH)
 
 async def safe_edit(msg: Message, text: str):
-    """Message Not Modified error မတက်စေရန် စစ်ဆေးပြီးမှ edit ပြုလုပ်ခြင်း"""
+    """Telegram Message Not Modified error မတက်စေရန် စစ်ဆေးပြီးမှ edit ပြုလုပ်ခြင်း"""
     try:
         if msg.text != text:
             await msg.edit_text(text)
     except MessageNotModified:
         pass
     except Exception as e:
-        print(f"Edit message error: {e}")
+        print(f"Edit message error: {e}", flush=True)
 
 @app.on_message(filters.command("start"))
 async def start_handler(client: Client, message: Message):
@@ -57,9 +57,10 @@ async def unzip_handler(client: Client, message: Message):
         extract_folder = os.path.join(temp_dir, "extracted")
         os.makedirs(extract_folder, exist_ok=True)
         
-        success = archiver.extract_archive(local_archive, extract_folder)
+        success, err_msg = archiver.extract_archive(local_archive, extract_folder)
         if not success:
-            return await safe_edit(status_msg, "❌ Archive ဖြည်ရာတွင် အမှားဖြစ်သွားပါသည် (Password မှားယွင်းခြင်း ဖြစ်နိုင်သည်)။")
+            err_detail = err_msg[:500] if err_msg else "Password မှားယွင်းခြင်း သို့မဟုတ် archive ပျက်စီးနေခြင်း"
+            return await safe_edit(status_msg, f"❌ **Archive ဖြည်ရာတွင် အမှားဖြစ်သွားပါသည်:**\n```\n{err_detail}\n```")
 
         await safe_edit(status_msg, "📤 Drive / Shared Drive သို့ ပြန်လည်တင်နေပါသည်...")
         parent_id = meta.get('parents', ['root'])[0]
@@ -98,9 +99,10 @@ async def zip_handler(client: Client, message: Message):
         archive_name = f"{meta['name']}.{fmt}"
         output_archive = os.path.join(temp_dir, archive_name)
 
-        success = archiver.compress_archive(local_target, output_archive, fmt=fmt)
+        success, err_msg = archiver.compress_archive(local_target, output_archive, fmt=fmt)
         if not success:
-            return await safe_edit(status_msg, f"❌ `{fmt}` archive ချုပ်ရာတွင် အမှားဖြစ်သွားပါသည်။")
+            err_detail = err_msg[:500] if err_msg else "CLI execution failed"
+            return await safe_edit(status_msg, f"❌ **`{fmt}` archive ချုပ်ရာတွင် အမှားဖြစ်သွားပါသည်:**\n```\n{err_detail}\n```")
 
         await safe_edit(status_msg, "📤 Shared Drive ထဲသို့ Archive တင်နေပါသည်...")
         parent_id = meta.get('parents', ['root'])[0]
@@ -114,4 +116,5 @@ async def zip_handler(client: Client, message: Message):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == "__main__":
+    print("Bot is starting...", flush=True)
     app.run()
