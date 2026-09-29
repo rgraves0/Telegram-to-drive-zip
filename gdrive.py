@@ -66,10 +66,12 @@ def download_folder(service, folder_id: str, local_dir: str):
             fields="nextPageToken, files(id, name, mimeType)",
             includeItemsFromAllDrives=True,
             supportsAllDrives=True,
+            pageSize=1000,
             pageToken=page_token
         ).execute()
 
-        for item in results.get('files', []):
+        files_list = results.get('files', [])
+        for item in files_list:
             item_path = os.path.join(local_dir, item['name'])
             if item['mimeType'] == 'application/vnd.google-apps.folder':
                 download_folder(service, item['id'], item_path)
