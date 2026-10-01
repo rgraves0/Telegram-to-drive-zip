@@ -100,7 +100,7 @@ async def zip_handler(client: Client, message: Message):
             print(f"Sheet Logging Error: {sheet_err}", flush=True)
 
         # Archive တင်ပြီးစီးပါက မူရင်း folder/file ကို Trash ထဲ ရွှေ့ခြင်း
-        await safe_edit(status_msg, "🗑️️ မူရင်း Folder အား Drive ထဲမှ ရှင်းလင်းနေပါသည်...")
+        await safe_edit(status_msg, "🗑 မူရင်း Folder အား Drive ထဲမှ ရှင်းလင်းနေပါသည်...")
         try:
             gdrive.trash_item(service, target_id)
             trash_status = "(မူရင်း Folder ကို Trash သို့ ရွှေ့ပြီးပါပြီ)"
@@ -108,6 +108,53 @@ async def zip_handler(client: Client, message: Message):
             trash_status = f"(မူရင်းဖျက်ရာတွင် အမှားရှိ: {e})"
 
         await safe_edit(status_msg, f"✅ **ပြီးစီးပါပြီ!**\nဖိုင်နာမည်: `{archive_name}`\n{trash_status}\n📊 Google Sheet သို့ စာရင်းသွင်းပြီးပါပြီ။")
+
+    except Exception as e:
+        await safe_edit(status_msg, f"❌ **Error:** `{str(e)}`")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        processing_users.discard(user_id)
+
+@app.on_message(filters.command("unzip"))
+async def unzip_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    if user_id in processing_users:
+        return
+
+    if len(message.command) < 2:
+        return await message.reply_text("အသုံးပြုပုံ: `/unzip <Drive_File_Link>`")
+
+    processing_users.add(user_id)
+    status_msg = await message.reply_text("⏳ Processing စတင်နေပါသည်...")
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        service = gdrive.get_drive_service()
+        target_id = gdrive.extract_id_from_url(message.command[1])
+        meta = gdrive.get_file_metadata(service, target_id)
+
+        if meta['mimeType'] == 'application/vnd.google-apps.folder':
+            return await safe_edit(status_msg, "❌ **Error:** Folder မဟုတ်ဘဲ Archive ဖိုင် (.7z, .zip, .rar) Link ကိုသာ ထည့်ပေးပါခင်ဗျာ။")
+
+        await safe_edit(status_msg, "📥 Google Drive မှ Archive ဖိုင်ကို ဒေါင်းလုဒ်ဆွဲနေပါသည်...")
+        archive_path = os.path.join(temp_dir, meta['name'])
+        gdrive.download_file(service, target_id, archive_path)
+
+        extract_folder_name = os.path.splitext(meta['name'])[0]
+        extract_dir = os.path.join(temp_dir, extract_folder_name)
+        os.makedirs(extract_dir, exist_ok=True)
+
+        await safe_edit(status_msg, "🔓 Archive ဖိုင်အား ဖြည်နေပါသည်...")
+        success, err_msg = archiver.extract_archive(archive_path, extract_dir)
+        if not success:
+            err_detail = err_msg[:500] if err_msg else "CLI execution failed"
+            return await safe_edit(status_msg, f"❌ **ဖိုင်ဖြည်ရာတွင် အမှားဖြစ်သွားပါသည်:**\n```\n{err_detail}\n```")
+
+        await safe_edit(status_msg, "📤 Drive ထဲသို့ Folder အဖြစ် ပြန်လည်တင်နေပါသည်...")
+        parent_id = meta.get('parents', ['root'])[0]
+        gdrive.upload_folder(service, extract_dir, parent_id)
+
+        await safe_edit(status_msg, f"✅ **Unzip လုပ်ခြင်း ပြီးစီးပါပြီ!**\nFolder နာမည်: `{extract_folder_name}`")
 
     except Exception as e:
         await safe_edit(status_msg, f"❌ **Error:** `{str(e)}`")
